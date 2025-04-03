@@ -1,219 +1,162 @@
-import React, { useState } from 'react';
-import { Dialog } from '@headlessui/react';
-import { useWeb3React } from '@web3-react/core';
-import { ethers } from 'ethers';
-import { Project } from '../types';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { fetchContributors } from '../api/projects';
-import { processPayment } from '../api/payments';
-import PaymentDistributorABI from '../contracts/PaymentDistributor.json';
+import React, { Fragment, useState } from 'react';
+import { Dialog, Transition } from '@headlessui/react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { createPayment } from '../api/projects';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface PaymentModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    project: Project;
+  isOpen: boolean;
+  onClose: () => void;
+  projectId: string;
+}
+
+interface PaymentFormData {
+  amount: string;
+  recipient: string;
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({
-    isOpen,
-    onClose,
-    project
+  isOpen,
+  onClose,
+  projectId
 }) => {
-    const { library, account } = useWeb3React();
-    const queryClient = useQueryClient();
-    const [amount, setAmount] = useState('');
-    const [paymentType, setPaymentType] = useState('contribution');
-    const [processing, setProcessing] = useState(false);
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState<PaymentFormData>({
+    amount: '',
+    recipient: '',
+  });
 
-    const { data: contributors } = useQuery(['contributors', project.id], () =>
-        fetchContributors(project.id)
-    );
+  const { mutateAsync, isPending, error } = useMutation({
+    mutationFn: (data: PaymentFormData) => createPayment(projectId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['projectPayments', projectId] });
+      onClose();
+    },
+    onError: (error: Error) => {
+      console.error('Failed to create payment:', error);
+    }
+  });
 
-    const paymentMutation = useMutation(processPayment, {
-        onSuccess: () => {
-            queryClient.invalidateQueries(['project', project.id]);
-            queryClient.invalidateQueries(['payments', project.id]);
-            onClose();
-        }
-    });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await mutateAsync(formData);
+  };
 
-    const handlePayment = async () => {
-        if (!library || !account || !amount || !contributors?.length) return;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
-        setProcessing(true);
-        try {
-            const signer = library.getSigner();
-            const contract = new ethers.Contract(
-                process.env.VITE_PAYMENT_DISTRIBUTOR_ADDRESS!,
-                PaymentDistributorABI.abi,
-                signer
-            );
-
-            // Calculate distribution based on payment type
-            const distributions = contributors.map((contributor) => ({
-                address: contributor.address,
-                amount: ethers.parseUnits(
-                    (
-                        (parseFloat(amount) * contributor.contribution_weight) /
-                        100
-                    ).toFixed(6),
-                    6
-                )
-            }));
-
-            // Create batch payment
-            const batchId = ethers.id(
-                `${project.id}-${Date.now()}-${Math.random()}`
-            );
-            const recipients = distributions.map((d) => d.address);
-            const amounts = distributions.map((d) => d.amount);
-
-            // Sign the batch
-            const signatures = await Promise.all(
-                distributions.map(async (dist) => {
-                    const message = ethers.solidityPackedKeccak256(
-                        ['bytes32', 'address', 'uint256'],
-                        [batchId, dist.address, dist.amount]
-                    );
-                    return signer.signMessage(ethers.getBytes(message));
-                })
-            );
-
-            // Send transaction
-            const tx = await contract.createBatch(
-                batchId,
-                recipients,
-                amounts,
-                signatures
-            );
-            await tx.wait();
-
-            // Process payment on backend
-            await paymentMutation.mutateAsync({
-                projectId: project.id,
-                amount: parseFloat(amount),
-                paymentType,
-                batchId,
-                txHash: tx.hash,
-                distributions
-            });
-        } catch (error) {
-            console.error('Payment failed:', error);
-            // Handle error (show notification, etc.)
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    return (
-        <Dialog
-            open={isOpen}
-            onClose={onClose}
-            className="fixed inset-0 z-10 overflow-y-auto"
+  return (
+    <Transition.Root show={isOpen} as={Fragment}>
+      <Dialog as="div" className="relative z-10" onClose={onClose}>
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
         >
-            <div className="flex min-h-screen items-center justify-center">
-                <Dialog.Overlay className="fixed inset-0 bg-black opacity-30" />
+          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+        </Transition.Child>
 
-                <div className="relative bg-white rounded-lg max-w-md w-full mx-4 p-6">
-                    <Dialog.Title className="text-lg font-medium text-gray-900">
-                        Process Payment
-                    </Dialog.Title>
-
-                    <div className="mt-4 space-y-4">
-                        <div>
-                            <label
-                                htmlFor="amount"
-                                className="block text-sm font-medium text-gray-700"
-                            >
-                                Amount (USDC)
-                            </label>
-                            <input
-                                type="number"
-                                id="amount"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                placeholder="0.00"
-                                min="0"
-                                step="0.01"
-                            />
-                        </div>
-
-                        <div>
-                            <label
-                                htmlFor="paymentType"
-                                className="block text-sm font-medium text-gray-700"
-                            >
-                                Payment Type
-                            </label>
-                            <select
-                                id="paymentType"
-                                value={paymentType}
-                                onChange={(e) => setPaymentType(e.target.value)}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            >
-                                <option value="contribution">
-                                    Contribution-based
-                                </option>
-                                <option value="equal">Equal Distribution</option>
-                                <option value="reputation">
-                                    Reputation-weighted
-                                </option>
-                            </select>
-                        </div>
-
-                        {contributors && (
-                            <div className="mt-4">
-                                <h4 className="text-sm font-medium text-gray-700">
-                                    Distribution Preview
-                                </h4>
-                                <div className="mt-2 max-h-40 overflow-y-auto">
-                                    {contributors.map((contributor) => (
-                                        <div
-                                            key={contributor.id}
-                                            className="flex justify-between py-2"
-                                        >
-                                            <span className="text-sm text-gray-600">
-                                                {contributor.username}
-                                            </span>
-                                            <span className="text-sm font-medium">
-                                                {(
-                                                    (parseFloat(amount || '0') *
-                                                        contributor.contribution_weight) /
-                                                    100
-                                                ).toFixed(2)}{' '}
-                                                USDC
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="mt-6 flex justify-end space-x-3">
-                            <button
-                                onClick={onClose}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-500"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handlePayment}
-                                disabled={!amount || processing}
-                                className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
-                                    !amount || processing
-                                        ? 'bg-indigo-400 cursor-not-allowed'
-                                        : 'bg-indigo-600 hover:bg-indigo-700'
-                                }`}
-                            >
-                                {processing ? 'Processing...' : 'Confirm Payment'}
-                            </button>
-                        </div>
-                    </div>
+        <div className="fixed inset-0 z-10 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enterTo="opacity-100 translate-y-0 sm:scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+              leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            >
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
+                  <button
+                    type="button"
+                    className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    onClick={onClose}
+                  >
+                    <span className="sr-only">Close</span>
+                    <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                  </button>
                 </div>
-            </div>
-        </Dialog>
-    );
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <Dialog.Title as="h3" className="text-base font-semibold leading-6 text-gray-900">
+                      Create Payment
+                    </Dialog.Title>
+                    <div className="mt-4">
+                      <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                          <label htmlFor="recipient" className="block text-sm font-medium text-gray-700">
+                            Recipient Address
+                          </label>
+                          <input
+                            type="text"
+                            name="recipient"
+                            id="recipient"
+                            value={formData.recipient}
+                            onChange={handleChange}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="0x..."
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
+                            Amount (USDC)
+                          </label>
+                          <input
+                            type="text"
+                            name="amount"
+                            id="amount"
+                            value={formData.amount}
+                            onChange={handleChange}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="100"
+                            required
+                          />
+                        </div>
+                        {error && (
+                          <p className="mt-2 text-sm text-red-600">
+                            {error instanceof Error ? error.message : 'An error occurred'}
+                          </p>
+                        )}
+                        <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                          <button
+                            type="submit"
+                            disabled={isPending}
+                            className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isPending ? 'Creating...' : 'Create Payment'}
+                          </button>
+                          <button
+                            type="button"
+                            className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                            onClick={onClose}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </div>
+      </Dialog>
+    </Transition.Root>
+  );
 };
 
 export default PaymentModal;

@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import {
     CurrencyDollarIcon,
     CodeBracketIcon,
-    FlagIcon
+    FolderIcon
 } from '@heroicons/react/24/outline';
 
 interface ActivityFeedProps {
@@ -16,8 +16,10 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities }) => {
         switch (type) {
             case 'payment':
                 return CurrencyDollarIcon;
-            case 'milestone':
-                return FlagIcon;
+            case 'project':
+                return FolderIcon;
+            case 'contribution':
+                return CodeBracketIcon;
             default:
                 return CodeBracketIcon;
         }
@@ -27,8 +29,10 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities }) => {
         switch (type) {
             case 'payment':
                 return 'bg-green-100 text-green-600';
-            case 'milestone':
+            case 'project':
                 return 'bg-purple-100 text-purple-600';
+            case 'contribution':
+                return 'bg-blue-100 text-blue-600';
             default:
                 return 'bg-blue-100 text-blue-600';
         }
@@ -62,22 +66,23 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities }) => {
                                     <div className="min-w-0 flex-1">
                                         <div>
                                             <div className="text-sm">
-                                                <span className="font-medium text-gray-900">
-                                                    {activity.title}
-                                                </span>
+                                                {activity.projectName && (
+                                                    <span className="font-medium text-gray-900">
+                                                        {activity.projectName}
+                                                    </span>
+                                                )}
                                             </div>
                                             <p className="mt-0.5 text-sm text-gray-500">
                                                 {activity.description}
                                             </p>
                                             {activity.amount && (
                                                 <p className="mt-0.5 text-sm font-medium text-green-600">
-                                                    {activity.amount}{' '}
-                                                    {activity.currency}
+                                                    {activity.amount} USDC
                                                 </p>
                                             )}
                                             <p className="mt-2 text-xs text-gray-500">
                                                 {format(
-                                                    new Date(activity.created_at),
+                                                    new Date(activity.timestamp),
                                                     'MMM d, yyyy HH:mm'
                                                 )}
                                             </p>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchProjects } from '../api/projects';
 import ProjectCard from '../components/ProjectCard';
@@ -9,9 +9,10 @@ export default function Projects() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filter, setFilter] = useState('all');
 
-  const { data: projects, isLoading } = useQuery(['projects', filter], () =>
-    fetchProjects(filter)
-  );
+  const { data: projects, isPending } = useQuery({
+    queryKey: ['projects', filter],
+    queryFn: () => fetchProjects(filter)
+  });
 
   return (
     <div className="space-y-6">
@@ -70,7 +71,7 @@ export default function Projects() {
         </div>
 
         <div className="p-6">
-          {isLoading ? (
+          {isPending ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
             </div>
@@ -89,6 +90,7 @@ export default function Projects() {
       <CreateProjectModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={() => setIsCreateModalOpen(false)}
       />
     </div>
   );

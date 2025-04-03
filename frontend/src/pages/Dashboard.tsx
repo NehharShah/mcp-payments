@@ -1,28 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useWeb3React } from '@web3-react/core';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
+import { Web3Provider } from '@ethersproject/providers';
 import { fetchUserStats, fetchRecentActivity } from '../api/dashboard';
 import StatsCard from '../components/StatsCard';
 import ActivityFeed from '../components/ActivityFeed';
 import ContributionChart from '../components/ContributionChart';
 
 export default function Dashboard() {
-  const { account, active } = useWeb3React();
+  const { account, isActive } = useWeb3React<Web3Provider>();
   const [timeframe, setTimeframe] = useState('30d');
 
-  const { data: stats } = useQuery(
-    ['userStats', account],
-    () => fetchUserStats(account as string),
-    { enabled: !!account }
-  );
+  const { data: stats } = useQuery({
+    queryKey: ['userStats', account],
+    queryFn: () => fetchUserStats(account as string),
+    enabled: !!account
+  });
 
-  const { data: activity } = useQuery(
-    ['recentActivity', account],
-    () => fetchRecentActivity(account as string),
-    { enabled: !!account }
-  );
+  const { data: activity } = useQuery({
+    queryKey: ['recentActivity', account],
+    queryFn: () => fetchRecentActivity(account as string),
+    enabled: !!account
+  });
 
-  if (!active) {
+  if (!isActive) {
     return (
       <div className="text-center py-12">
         <h2 className="text-3xl font-bold text-gray-900">Welcome to MCP Payment</h2>
@@ -57,29 +58,26 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <StatsCard
-          title="Total Earned"
-          value={stats?.totalEarned || '0.00'}
-          currency="USDC"
-          trend={stats?.earningsTrend || 0}
+          title="Total Payments"
+          value={stats?.totalPayments.toString() || '0'}
+          subtext="All time"
         />
         <StatsCard
-          title="Contributions"
-          value={stats?.totalContributions || '0'}
-          subtext="Last 30 days"
-          trend={stats?.contributionsTrend || 0}
+          title="Total Contributions"
+          value={stats?.totalContributions.toString() || '0'}
+          subtext="All time"
         />
         <StatsCard
-          title="Reputation Score"
-          value={stats?.reputationScore || '0'}
-          subtext="Platform-wide"
-          trend={stats?.reputationTrend || 0}
+          title="Active Projects"
+          value={stats?.activeProjects.toString() || '0'}
+          subtext="Current"
         />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-medium text-gray-900">Contribution Activity</h3>
-          <ContributionChart timeframe={timeframe} data={stats?.contributionHistory} />
+          <ContributionChart timeframe={timeframe} data={[]} />
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>

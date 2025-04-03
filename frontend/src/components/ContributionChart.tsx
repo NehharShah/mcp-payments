@@ -19,7 +19,6 @@ interface ContributionChartProps {
 }
 
 const ContributionChart: React.FC<ContributionChartProps> = ({
-    timeframe,
     data = []
 }) => {
     const chartData = useMemo(() => {

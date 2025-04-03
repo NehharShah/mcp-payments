@@ -1,17 +1,18 @@
 import React from 'react';
-import { useQuery } from 'react-query';
-import { fetchContributors } from '../api/projects';
+import { useQuery } from '@tanstack/react-query';
+import { fetchProjectContributions } from '../api/projects';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
+import { Contribution } from '../types';
 
 interface ContributorsListProps {
     projectId: string;
 }
 
 const ContributorsList: React.FC<ContributorsListProps> = ({ projectId }) => {
-    const { data: contributors, isLoading } = useQuery(
-        ['contributors', projectId],
-        () => fetchContributors(projectId)
-    );
+    const { data: contributions, isLoading } = useQuery({
+        queryKey: ['contributors', projectId],
+        queryFn: () => fetchProjectContributions(projectId)
+    });
 
     if (isLoading) {
         return (
@@ -24,46 +25,28 @@ const ContributorsList: React.FC<ContributorsListProps> = ({ projectId }) => {
     return (
         <div className="flow-root">
             <ul role="list" className="-my-5 divide-y divide-gray-200">
-                {contributors?.map((contributor) => (
-                    <li key={contributor.id} className="py-4">
+                {contributions?.map((contribution: Contribution) => (
+                    <li key={contribution.id} className="py-4">
                         <div className="flex items-center space-x-4">
                             <div className="flex-shrink-0">
-                                {contributor.avatar_url ? (
-                                    <img
-                                        className="h-8 w-8 rounded-full"
-                                        src={contributor.avatar_url}
-                                        alt={contributor.username}
-                                    />
-                                ) : (
-                                    <UserCircleIcon className="h-8 w-8 text-gray-400" />
-                                )}
+                                <UserCircleIcon className="h-8 w-8 text-gray-400" />
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium text-gray-900">
-                                    {contributor.username}
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                    {contribution.contributor}
                                 </p>
-                                <p className="truncate text-sm text-gray-500">
-                                    {contributor.contribution_count} contributions
+                                <p className="text-sm text-gray-500 truncate">
+                                    {contribution.description}
                                 </p>
                             </div>
                             <div>
-                                <div className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                                    {contributor.contribution_weight.toFixed(1)}%
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-2">
-                            <div className="flex items-center text-sm text-gray-500">
-                                <div className="flex-1">
-                                    <div className="bg-gray-200 rounded-full h-2">
-                                        <div
-                                            className="bg-indigo-600 rounded-full h-2"
-                                            style={{
-                                                width: `${contributor.contribution_weight}%`
-                                            }}
-                                        ></div>
-                                    </div>
-                                </div>
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    contribution.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                    contribution.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                }`}>
+                                    {contribution.status}
+                                </span>
                             </div>
                         </div>
                     </li>
@@ -71,6 +54,6 @@ const ContributorsList: React.FC<ContributorsListProps> = ({ projectId }) => {
             </ul>
         </div>
     );
-};
+}
 
 export default ContributorsList;

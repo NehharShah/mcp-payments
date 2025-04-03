@@ -13,9 +13,15 @@ A Model Context Protocol (MCP) based payment distribution system for open source
 - Stablecoin integration
 - Smart contract interaction
 - Contribution tracking
+- Modern React frontend with:
+  - Real-time Web3 integration
+  - Interactive data visualizations
+  - Responsive UI with Tailwind CSS
+  - TypeScript support
 
 ## Setup
 
+### Backend
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
@@ -31,3 +37,40 @@ cp .env.example .env
 ```bash
 uvicorn app.main:app --reload
 ```
+
+### Frontend
+1. Navigate to frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start development server:
+```bash
+npm run dev
+```
+
+4. For production build:
+```bash
+npm run build
+```
+
+## Tech Stack
+
+### Frontend
+- React 18 with TypeScript
+- Vite for build tooling
+- Web3 integration with ethers.js and web3-react
+- UI components with Tailwind CSS and Headless UI
+- Data visualization using Recharts
+- State management with React Query
+
+### Backend
+- FastAPI
+- SQLAlchemy
+- Web3.py for blockchain interaction
+- PostgreSQL database

@@ -41,18 +41,17 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
     mapping(address => uint256) public totalPaid;
     mapping(bytes32 => bool) public usedSignatures;
     
-    event PaymentProcessed(
+    event BatchCreatedEvent(bytes32 indexed batchId);
+    event BatchCompletedEvent(bytes32 indexed batchId, uint256 totalAmount);
+    event BatchExpiredEvent(bytes32 indexed batchId);
+    event PaymentProcessedEvent(
         bytes32 indexed batchId,
         address indexed recipient,
         uint256 amount,
         bytes signature
     );
-    
-    event BatchCompleted(bytes32 indexed batchId, uint256 totalAmount);
-    event BatchExpired(bytes32 indexed batchId);
-    event PaymentDisputed(bytes32 indexed batchId, address indexed recipient);
-    event BatchTimedOut(bytes32 indexed batchId);
-    event BatchCreated(bytes32 indexed batchId);
+    event PaymentDisputedEvent(bytes32 indexed batchId, address indexed recipient);
+    event BatchTimedOutEvent(bytes32 indexed batchId);
     
     constructor(address _stablecoin) {
         if (_stablecoin == address(0)) revert InvalidRecipient();
@@ -95,7 +94,7 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
             revert TransferFailed();
         }
         
-        emit BatchCreated(batchId);
+        emit BatchCreatedEvent(batchId);
     }
     
     function processBatch(bytes32 batchId) external nonReentrant whenNotPaused {
@@ -125,12 +124,12 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
                 totalPaid[payment.recipient] += payment.amount;
                 totalProcessed += payment.amount;
                 
-                emit PaymentProcessed(batchId, payment.recipient, payment.amount, payment.signature);
+                emit PaymentProcessedEvent(batchId, payment.recipient, payment.amount, payment.signature);
             }
         }
         
         if (totalProcessed > 0) {
-            emit BatchCompleted(batchId, totalProcessed);
+            emit BatchCompletedEvent(batchId, totalProcessed);
         }
     }
     
@@ -142,7 +141,7 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
         if (msg.sender != payment.recipient) revert UnauthorizedDispute();
         if (payment.processed) revert PaymentAlreadyProcessed();
         
-        emit PaymentDisputed(batchId, msg.sender);
+        emit PaymentDisputedEvent(batchId, msg.sender);
     }
     
     function expireBatch(bytes32 batchId) external {
@@ -166,7 +165,7 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
             if (!stablecoin.transfer(owner(), unprocessedAmount)) {
                 revert TransferFailed();
             }
-            emit BatchExpired(batchId);
+            emit BatchExpiredEvent(batchId);
         }
     }
     

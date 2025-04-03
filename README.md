@@ -31,19 +31,3 @@ cp .env.example .env
 ```bash
 uvicorn app.main:app --reload
 ```
-
-## Project Structure
-
-```
-mcp-payment/
-├── app/
-│   ├── api/
-│   ├── core/
-│   ├── models/
-│   ├── schemas/
-│   └── services/
-├── tests/
-├── alembic/
-├── .env
-└── requirements.txt
-```

@@ -10,13 +10,16 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 error InvalidSignature();
 error BatchAlreadyExists();
 error BatchNotFound();
-error BatchExpired();
+error BatchExpired(bytes32 batchId);
 error InvalidBatchSize();
 error SignatureAlreadyUsed();
 error TransferFailed();
 error InvalidRecipient();
 error PaymentAlreadyProcessed();
 error UnauthorizedDispute();
+error BatchTimedOut(bytes32 batchId);
+error BatchNotExpired(bytes32 batchId);
+error InvalidBatchInputs();
 
 contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
     using ECDSA for bytes32;
@@ -29,11 +32,12 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
         address recipient;
         uint256 amount;
         bool processed;
-        uint256 timestamp;
+        uint256 createdAt;
         bytes signature;
     }
     
-    mapping(bytes32 => Payment[]) public batchPayments;
+    mapping(bytes32 => mapping(uint256 => Payment)) public batchPayments;
+    mapping(bytes32 => uint256) public batchCounts;
     mapping(address => uint256) public totalPaid;
     mapping(bytes32 => bool) public usedSignatures;
     
@@ -47,6 +51,8 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
     event BatchCompleted(bytes32 indexed batchId, uint256 totalAmount);
     event BatchExpired(bytes32 indexed batchId);
     event PaymentDisputed(bytes32 indexed batchId, address indexed recipient);
+    event BatchTimedOut(bytes32 indexed batchId);
+    event BatchCreated(bytes32 indexed batchId);
     
     constructor(address _stablecoin) {
         if (_stablecoin == address(0)) revert InvalidRecipient();
@@ -59,47 +65,58 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
         uint256[] calldata amounts,
         bytes[] calldata signatures
     ) external whenNotPaused onlyOwner {
-        if (recipients.length != amounts.length) revert InvalidBatchSize();
-        if (recipients.length != signatures.length) revert InvalidBatchSize();
-        if (recipients.length > MAX_BATCH_SIZE) revert InvalidBatchSize();
-        if (batchPayments[batchId].length > 0) revert BatchAlreadyExists();
+        if (recipients.length == 0 || recipients.length > MAX_BATCH_SIZE) revert InvalidBatchSize();
+        if (recipients.length != amounts.length || recipients.length != signatures.length)
+            revert InvalidBatchInputs();
+        if (batchCounts[batchId] > 0) revert BatchAlreadyExists();
         
-        uint256 totalAmount = 0;
+        uint256 totalAmount;
         for (uint256 i = 0; i < recipients.length; i++) {
             if (recipients[i] == address(0)) revert InvalidRecipient();
-            bytes32 sigHash = keccak256(signatures[i]);
-            if (usedSignatures[sigHash]) revert SignatureAlreadyUsed();
+            if (signatures[i].length != 65) revert InvalidSignature();
             if (!_verifyPayment(batchId, recipients[i], amounts[i], signatures[i])) {
                 revert InvalidSignature();
             }
             
-            usedSignatures[sigHash] = true;
-            batchPayments[batchId].push(
-                Payment({
-                    recipient: recipients[i],
-                    amount: amounts[i],
-                    processed: false,
-                    timestamp: block.timestamp,
-                    signature: signatures[i]
-                })
-            );
             totalAmount += amounts[i];
+
+            batchPayments[batchId][i] = Payment({
+                recipient: recipients[i],
+                amount: amounts[i],
+                processed: false,
+                createdAt: block.timestamp,
+                signature: signatures[i]
+            });
         }
+        
+        batchCounts[batchId] = recipients.length;
         
         if (!stablecoin.transferFrom(msg.sender, address(this), totalAmount)) {
             revert TransferFailed();
         }
+        
+        emit BatchCreated(batchId);
     }
     
     function processBatch(bytes32 batchId) external nonReentrant whenNotPaused {
-        Payment[] storage payments = batchPayments[batchId];
-        if (payments.length == 0) revert BatchNotFound();
-        
+        uint256 count = batchCounts[batchId];
+        if (count == 0) revert BatchNotFound();
+
+        bool hasExpired = false;
+        for (uint256 i = 0; i < count; i++) {
+            Payment storage payment = batchPayments[batchId][i];
+            if (block.timestamp > payment.createdAt + BATCH_TIMEOUT) {
+                hasExpired = true;
+                break;
+            }
+        }
+        if (!hasExpired) revert BatchNotExpired(batchId);
+
         uint256 totalProcessed = 0;
         
-        for (uint256 i = 0; i < payments.length; i++) {
-            Payment storage payment = payments[i];
-            if (!payment.processed && block.timestamp <= payment.timestamp + BATCH_TIMEOUT) {
+        for (uint256 i = 0; i < count; i++) {
+            Payment storage payment = batchPayments[batchId][i];
+            if (!payment.processed) {
                 if (!stablecoin.transfer(payment.recipient, payment.amount)) {
                     revert TransferFailed();
                 }
@@ -118,10 +135,10 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
     }
     
     function disputePayment(bytes32 batchId, uint256 paymentIndex) external {
-        Payment[] storage payments = batchPayments[batchId];
-        if (paymentIndex >= payments.length) revert BatchNotFound();
+        uint256 count = batchCounts[batchId];
+        if (paymentIndex >= count) revert BatchNotFound();
         
-        Payment storage payment = payments[paymentIndex];
+        Payment storage payment = batchPayments[batchId][paymentIndex];
         if (msg.sender != payment.recipient) revert UnauthorizedDispute();
         if (payment.processed) revert PaymentAlreadyProcessed();
         
@@ -129,14 +146,19 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
     }
     
     function expireBatch(bytes32 batchId) external {
-        Payment[] storage payments = batchPayments[batchId];
-        if (payments.length == 0) revert BatchNotFound();
-        if (block.timestamp <= payments[0].timestamp + BATCH_TIMEOUT) revert BatchExpired();
+        uint256 count = batchCounts[batchId];
+        if (count == 0) revert BatchNotFound();
+        
+        Payment storage firstPayment = batchPayments[batchId][0];
+        if (block.timestamp < firstPayment.createdAt + BATCH_TIMEOUT) {
+            revert BatchNotExpired(batchId);
+        }
         
         uint256 unprocessedAmount = 0;
-        for (uint256 i = 0; i < payments.length; i++) {
-            if (!payments[i].processed) {
-                unprocessedAmount += payments[i].amount;
+        for (uint256 i = 0; i < count; i++) {
+            Payment storage payment = batchPayments[batchId][i];
+            if (!payment.processed) {
+                unprocessedAmount += payment.amount;
             }
         }
         
@@ -163,9 +185,12 @@ contract PaymentDistributor is Ownable, ReentrancyGuard, Pausable {
         bytes memory signature
     ) internal pure returns (bool) {
         bytes32 messageHash = keccak256(
-            abi.encodePacked(batchId, recipient, amount)
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(abi.encodePacked(batchId, recipient, amount))
+            )
         );
-        bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
-        return ethSignedMessageHash.recover(signature) == recipient;
+        address signer = ECDSA.recover(messageHash, signature);
+        return signer == recipient;
     }
 }

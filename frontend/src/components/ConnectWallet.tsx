@@ -1,17 +1,19 @@
 import React from 'react';
 import { useWeb3React } from '@web3-react/core';
-import { InjectedConnector } from '@web3-react/injected-connector';
-
-const injected = new InjectedConnector({
-    supportedChainIds: [1, 5] // Mainnet and Goerli
-});
+import { Web3Provider } from '@ethersproject/providers';
+import type { EthereumProvider } from '../services/web3';
 
 const ConnectWallet: React.FC = () => {
-    const { active, account, activate, deactivate } = useWeb3React();
+    const { account, isActive } = useWeb3React<Web3Provider>();
 
     const connect = async () => {
         try {
-            await activate(injected);
+            if (typeof window.ethereum === 'undefined') {
+                throw new Error('Please install MetaMask to use this feature');
+            }
+            const ethereum = window.ethereum as unknown as EthereumProvider;
+            // Request account access
+            await ethereum.request({ method: 'eth_requestAccounts' });
         } catch (error) {
             console.error('Failed to connect:', error);
         }
@@ -19,7 +21,12 @@ const ConnectWallet: React.FC = () => {
 
     const disconnect = () => {
         try {
-            deactivate();
+            if (typeof window.ethereum === 'undefined') {
+                throw new Error('MetaMask is not installed');
+            }
+            const ethereum = window.ethereum as unknown as EthereumProvider;
+            // Clear the selected address
+            ethereum.selectedAddress = null;
         } catch (error) {
             console.error('Failed to disconnect:', error);
         }
@@ -27,7 +34,7 @@ const ConnectWallet: React.FC = () => {
 
     return (
         <div>
-            {active ? (
+            {isActive ? (
                 <div className="flex items-center space-x-4">
                     <span className="text-sm text-gray-700">
                         Connected: {account?.slice(0, 6)}...

@@ -8,6 +8,20 @@ app = FastAPI(title="MCP Payment Distribution System")
 payment_model = MCPPaymentModel()
 payment_processor = PaymentProcessor()
 
+@app.get("/")
+async def root():
+    """Root endpoint that returns basic API information"""
+    return {
+        "name": "MCP Payment Distribution System",
+        "version": "1.0.0",
+        "description": "API for managing and distributing payments using MCP model"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
 class PaymentRequest(BaseModel):
     payment_type: PaymentType
     amount: float

@@ -19,3 +19,5 @@ goerli = { key = "${ETHERSCAN_API_KEY}" }
 line_length = 120
 tab_width = 4
 bracket_spacing = true
+
+remappings = ['@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/']

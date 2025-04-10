@@ -8,3 +8,5 @@ cache/
 broadcast/
 __pycache__
 out/
+lib/
+.env.local

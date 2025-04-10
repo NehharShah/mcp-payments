@@ -1,32 +1,38 @@
 import React from 'react';
 import { useWeb3React } from '@web3-react/core';
 import { Web3Provider } from '@ethersproject/providers';
-import type { EthereumProvider } from '../services/web3';
+import { MetaMask } from '@web3-react/metamask';
+import { EthereumProvider } from '../services/web3';
 
 const ConnectWallet: React.FC = () => {
-    const { account, isActive } = useWeb3React<Web3Provider>();
+    const { account, isActive, connector } = useWeb3React<Web3Provider>();
 
     const connect = async () => {
         try {
-            if (typeof window.ethereum === 'undefined') {
-                throw new Error('Please install MetaMask to use this feature');
+            const ethereum = window.ethereum as EthereumProvider;
+            if (!ethereum) {
+                throw new Error('MetaMask not found');
             }
-            const ethereum = window.ethereum as unknown as EthereumProvider;
-            // Request account access
             await ethereum.request({ method: 'eth_requestAccounts' });
         } catch (error) {
             console.error('Failed to connect:', error);
         }
     };
 
-    const disconnect = () => {
+    const disconnect = async () => {
         try {
-            if (typeof window.ethereum === 'undefined') {
-                throw new Error('MetaMask is not installed');
+            const ethereum = window.ethereum as EthereumProvider;
+            if (!connector) {
+                console.error('No connector found');
+                return;
             }
-            const ethereum = window.ethereum as unknown as EthereumProvider;
-            // Clear the selected address
-            ethereum.selectedAddress = null;
+            
+            if (!(connector instanceof MetaMask)) {
+                console.error('Not a MetaMask connector');
+                return;
+            }
+            
+            await ethereum.request({ method: 'eth_disconnect' });
         } catch (error) {
             console.error('Failed to disconnect:', error);
         }

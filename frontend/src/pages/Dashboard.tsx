@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useWeb3React } from '@web3-react/core';
 import { useQuery } from '@tanstack/react-query';
 import { Web3Provider } from '@ethersproject/providers';
-import { fetchUserStats, fetchRecentActivity } from '../api/dashboard';
+import { fetchUserStats, fetchRecentActivity, fetchContributionData } from '../api/dashboard';
 import StatsCard from '../components/StatsCard';
 import ActivityFeed from '../components/ActivityFeed';
-import ContributionChart from '../components/ContributionChart';
+import D3ContributionChart from '../components/D3ContributionChart';
 
 export default function Dashboard() {
   const { account, isActive } = useWeb3React<Web3Provider>();
@@ -20,6 +20,12 @@ export default function Dashboard() {
   const { data: activity } = useQuery({
     queryKey: ['recentActivity', account],
     queryFn: () => fetchRecentActivity(account as string),
+    enabled: !!account
+  });
+
+  const { data: contributionData } = useQuery({
+    queryKey: ['contributionData', account, timeframe],
+    queryFn: () => fetchContributionData(account as string, timeframe),
     enabled: !!account
   });
 
@@ -77,7 +83,9 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-medium text-gray-900">Contribution Activity</h3>
-          <ContributionChart timeframe={timeframe} data={[]} />
+          <div className="h-[400px]">
+            <D3ContributionChart data={contributionData || []} />
+          </div>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>

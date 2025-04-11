@@ -156,7 +156,7 @@ contract LiquidityPool is Ownable, ReentrancyGuard, Pausable {
     /// @dev Only callable by the contract owner
     /// @param newFee New swap fee in basis points (must be less than FEE_DENOMINATOR)
     function setSwapFee(uint256 newFee) external onlyOwner {
-        require(newFee <= 100, "Fee too high"); // Max 1%
+        if (newFee > 100) revert InvalidFee(); // Max 1%
         swapFee = newFee;
     }
     

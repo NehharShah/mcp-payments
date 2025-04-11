@@ -220,7 +220,7 @@ contract LiquidityPoolTest is Test {
     }
 
     function test_RevertWhen_SetSwapFeeTooHigh() public {
-        vm.expectRevert("Fee too high");
+        vm.expectRevert(InvalidFee.selector);
         pool.setSwapFee(101); // > 1%
     }
 

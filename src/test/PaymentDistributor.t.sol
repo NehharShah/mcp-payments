@@ -239,11 +239,11 @@ contract PaymentDistributorTest is Test {
         uint256 length = 0;
         for (uint256 i = 0; i < 100; i++) {
             try distributor.batchPayments(batchId, i) returns (
-                address recipient,
-                uint256 amount,
-                bool processed,
-                uint256 createdAt,
-                bytes memory signature
+                address,
+                uint256,
+                bool,
+                uint256,
+                bytes memory
             ) {
                 length++;
             } catch {

@@ -131,7 +131,7 @@ contract StablecoinRegistry is Ownable, ReentrancyGuard {
         if (!stablecoins[token].isRegistered) revert StablecoinNotRegistered();
         
         // Check minimum liquidity
-        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 balance = IERC20(token).balanceOf(msg.sender);
         if (balance < stablecoins[token].minLiquidity) revert InvalidStablecoin();
         
         // Check price feed is active

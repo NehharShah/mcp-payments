@@ -8,10 +8,11 @@ from app.core.mcp import PaymentType
 import json
 
 class PaymentService:
-    def __init__(self, db: Session, web3_provider: str, contract_address: str):
+    def __init__(self, db: Session, web3_provider: str, distributor_address: str, liquidity_pool_address: str):
         self.db = db
         self.w3 = Web3(Web3.HTTPProvider(web3_provider))
-        self.contract = self._load_contract(contract_address)
+        self.distributor_address = distributor_address
+        self.liquidity_pool_address = liquidity_pool_address
         
     def create_batch_payment(
         self,
@@ -45,7 +46,8 @@ class PaymentService:
         amounts = [self.w3.to_wei(p.amount, 'ether') for p in payments]
         
         # Build transaction
-        tx = self.contract.functions.createBatch(
+        contract = self.get_distributor_contract()
+        tx = contract.functions.createBatch(
             batch_id,
             recipients,
             amounts
@@ -70,7 +72,8 @@ class PaymentService:
     def process_batch_payment(self, batch_id: str) -> Dict[str, Any]:
         """Process a batch payment"""
         # Call contract to process batch
-        tx = self.contract.functions.processBatch(batch_id).build_transaction({
+        contract = self.get_distributor_contract()
+        tx = contract.functions.processBatch(batch_id).build_transaction({
             'from': self.w3.eth.default_account,
             'gas': 2000000,
             'gasPrice': self.w3.eth.gas_price,
@@ -129,12 +132,19 @@ class PaymentService:
             for p in payments
         ]
     
-    def _load_contract(self, address: str):
-        """Load the payment distributor contract"""
+    def get_distributor_contract(self):
         with open('contracts/PaymentDistributor.json') as f:
             contract_json = json.load(f)
         return self.w3.eth.contract(
-            address=address,
+            address=self.distributor_address,
+            abi=contract_json['abi']
+        )
+    
+    def get_liquidity_pool_contract(self):
+        with open('contracts/LiquidityPool.json') as f:
+            contract_json = json.load(f)
+        return self.w3.eth.contract(
+            address=self.liquidity_pool_address,
             abi=contract_json['abi']
         )
     

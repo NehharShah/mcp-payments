@@ -65,9 +65,10 @@ contract StablecoinRegistry is Ownable, ReentrancyGuard {
         delete stablecoins[token];
         
         // Remove from supported stablecoins array
-        for (uint i = 0; i < supportedStablecoins.length; i++) {
+        uint256 length = supportedStablecoins.length;
+        for (uint i = 0; i < length; i++) {
             if (supportedStablecoins[i] == token) {
-                supportedStablecoins[i] = supportedStablecoins[supportedStablecoins.length - 1];
+                supportedStablecoins[i] = supportedStablecoins[length - 1];
                 supportedStablecoins.pop();
                 break;
             }
